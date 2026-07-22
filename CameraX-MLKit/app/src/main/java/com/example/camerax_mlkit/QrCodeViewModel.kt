@@ -44,8 +44,10 @@ class QrCodeViewModel(barcode: Barcode) {
                         val openBrowserIntent = Intent(Intent.ACTION_VIEW)
                         openBrowserIntent.data = Uri.parse(qrContent)
                         v.context.startActivity(openBrowserIntent)
+                        true
+                    } else {
+                        false
                     }
-                    true // return true from the callback to signify the event was handled
                 }
             }
             // Add other QR Code types here to handle other types of data,

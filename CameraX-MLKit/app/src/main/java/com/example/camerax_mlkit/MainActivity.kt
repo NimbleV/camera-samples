@@ -84,21 +84,25 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.getMainExecutor(this)
         ) { result: MlKitAnalyzer.Result? ->
             val barcodeResults = result?.getValue(barcodeScanner)
-            if ((barcodeResults == null) ||
-                (barcodeResults.size == 0) ||
-                (barcodeResults.first() == null)
-            ) {
+            if (barcodeResults.isNullOrEmpty()) {
                 previewView.overlay.clear()
                 previewView.setOnTouchListener { _, _ -> false } //no-op
                 return@MlKitAnalyzer
             }
 
-            val qrCodeViewModel = QrCodeViewModel(barcodeResults[0])
-            val qrCodeDrawable = QrCodeDrawable(qrCodeViewModel)
-
-            previewView.setOnTouchListener(qrCodeViewModel.qrCodeTouchCallback)
             previewView.overlay.clear()
-            previewView.overlay.add(qrCodeDrawable)
+            val qrCodeViewModels = barcodeResults.filterNotNull().map { QrCodeViewModel(it) }
+            qrCodeViewModels.forEachIndexed { i, viewModel ->
+                previewView.overlay.add(QrCodeDrawable(viewModel))
+                Log.d(TAG, "barcode detected($i):" + viewModel.qrContent)
+            }
+            Log.d(TAG, "==============")
+
+            previewView.setOnTouchListener { v, e ->
+                qrCodeViewModels.any { viewModel ->
+                    viewModel.qrCodeTouchCallback(v, e)
+                }
+            }
         }
 
         cameraController.setImageAnalysisAnalyzer (
@@ -107,7 +111,7 @@ class MainActivity : AppCompatActivity() {
                 override fun analyze(imageProxy: ImageProxy) {
                     val width = imageProxy.width
                     val height = imageProxy.height
-                    Log.d(TAG, "Image size: ${width}x${height}")
+                    //Log.d(TAG, "Image size: ${width}x${height}")
 
                     val imgBuffer = imageProxy.planes[0].buffer
                     //여기서 이미지 버퍼이용.
