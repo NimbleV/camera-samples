@@ -18,10 +18,14 @@ package com.example.camerax_mlkit
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.CameraController.COORDINATE_SYSTEM_VIEW_REFERENCED
 import androidx.camera.view.LifecycleCameraController
@@ -46,6 +50,12 @@ class MainActivity : AppCompatActivity() {
         viewBinding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(viewBinding.root)
 
+        //  화면 깨우기 및 잠금 해제 설정 (안드로이드 10 / API 29 이상)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+
         // Request camera permissions
         if (allPermissionsGranted()) {
             startCamera()
@@ -63,33 +73,59 @@ class MainActivity : AppCompatActivity() {
         val previewView: PreviewView = viewBinding.viewFinder
 
         val options = BarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            //.setBarcodeFormats(Barcode.FORMAT_QR_CODE, Barcode.FORMAT_CODE_39)
+            .enableAllPotentialBarcodes()
             .build()
         barcodeScanner = BarcodeScanning.getClient(options)
 
-        cameraController.setImageAnalysisAnalyzer(
+        val mlKitAnalyzer = MlKitAnalyzer(
+            listOf(barcodeScanner),
+            COORDINATE_SYSTEM_VIEW_REFERENCED,
+            ContextCompat.getMainExecutor(this)
+        ) { result: MlKitAnalyzer.Result? ->
+            val barcodeResults = result?.getValue(barcodeScanner)
+            if ((barcodeResults == null) ||
+                (barcodeResults.size == 0) ||
+                (barcodeResults.first() == null)
+            ) {
+                previewView.overlay.clear()
+                previewView.setOnTouchListener { _, _ -> false } //no-op
+                return@MlKitAnalyzer
+            }
+
+            val qrCodeViewModel = QrCodeViewModel(barcodeResults[0])
+            val qrCodeDrawable = QrCodeDrawable(qrCodeViewModel)
+
+            previewView.setOnTouchListener(qrCodeViewModel.qrCodeTouchCallback)
+            previewView.overlay.clear()
+            previewView.overlay.add(qrCodeDrawable)
+        }
+
+        cameraController.setImageAnalysisAnalyzer (
             ContextCompat.getMainExecutor(this),
-            MlKitAnalyzer(
-                listOf(barcodeScanner),
-                COORDINATE_SYSTEM_VIEW_REFERENCED,
-                ContextCompat.getMainExecutor(this)
-            ) { result: MlKitAnalyzer.Result? ->
-                val barcodeResults = result?.getValue(barcodeScanner)
-                if ((barcodeResults == null) ||
-                    (barcodeResults.size == 0) ||
-                    (barcodeResults.first() == null)
-                ) {
-                    previewView.overlay.clear()
-                    previewView.setOnTouchListener { _, _ -> false } //no-op
-                    return@MlKitAnalyzer
+            object : ImageAnalysis.Analyzer {
+                override fun analyze(imageProxy: ImageProxy) {
+                    val width = imageProxy.width
+                    val height = imageProxy.height
+                    Log.d(TAG, "Image size: ${width}x${height}")
+
+                    val imgBuffer = imageProxy.planes[0].buffer
+                    //여기서 이미지 버퍼이용.
+
+                    mlKitAnalyzer.analyze(imageProxy)
                 }
 
-                val qrCodeViewModel = QrCodeViewModel(barcodeResults[0])
-                val qrCodeDrawable = QrCodeDrawable(qrCodeViewModel)
+                override fun updateTransform(matrix: android.graphics.Matrix?) {
+                    mlKitAnalyzer.updateTransform(matrix)
+                }
 
-                previewView.setOnTouchListener(qrCodeViewModel.qrCodeTouchCallback)
-                previewView.overlay.clear()
-                previewView.overlay.add(qrCodeDrawable)
+                override fun getDefaultTargetResolution(): android.util.Size {
+                    return mlKitAnalyzer.defaultTargetResolution
+                }
+
+                override fun getTargetCoordinateSystem(): Int {
+                    return mlKitAnalyzer.targetCoordinateSystem
+                }
             }
         )
 
