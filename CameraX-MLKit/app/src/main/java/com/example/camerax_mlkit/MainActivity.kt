@@ -21,11 +21,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.util.Size
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.CameraController.COORDINATE_SYSTEM_VIEW_REFERENCED
 import androidx.camera.view.LifecycleCameraController
@@ -70,7 +73,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCamera() {
         var cameraController = LifecycleCameraController(baseContext)
+
         val previewView: PreviewView = viewBinding.viewFinder
+        previewView.scaleType = PreviewView.ScaleType.FIT_CENTER
+        //FIT_CENTER로 해야 이미지가 짤리지 않고 보여진다. 대신 검은부분이 생길 수 있다.
+        //FILL_CENTER로 하면 화면을 꽉 채우는 대신 일부가 안 보일 수 있다.
 
         val options = BarcodeScannerOptions.Builder()
             //.setBarcodeFormats(Barcode.FORMAT_QR_CODE, Barcode.FORMAT_CODE_39)
@@ -84,6 +91,7 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.getMainExecutor(this)
         ) { result: MlKitAnalyzer.Result? ->
             val barcodeResults = result?.getValue(barcodeScanner)
+
             if (barcodeResults.isNullOrEmpty()) {
                 previewView.overlay.clear()
                 previewView.setOnTouchListener { _, _ -> false } //no-op
@@ -105,18 +113,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val resolutionSelector = ResolutionSelector.Builder()
+            .setResolutionStrategy(
+                ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY
+                //ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)
+                //ResolutionStrategy(Size(3264, 2448), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)
+            )
+            .build()
+        cameraController.imageAnalysisResolutionSelector = resolutionSelector
+
         cameraController.setImageAnalysisAnalyzer (
             ContextCompat.getMainExecutor(this),
             object : ImageAnalysis.Analyzer {
                 override fun analyze(imageProxy: ImageProxy) {
                     val width = imageProxy.width
                     val height = imageProxy.height
-                    //Log.d(TAG, "Image size: ${width}x${height}")
+                    Log.d(TAG, "Image size: ${width}x${height}")
 
                     val imgBuffer = imageProxy.planes[0].buffer
                     //여기서 이미지 버퍼이용.
 
                     mlKitAnalyzer.analyze(imageProxy)
+                    //imageProxy.close()
                 }
 
                 override fun updateTransform(matrix: android.graphics.Matrix?) {

@@ -38,11 +38,14 @@ class QrCodeViewModel(barcode: Barcode) {
     init {
         when (barcode.valueType) {
             Barcode.TYPE_URL -> {
-                qrContent = barcode.url!!.url!!
+                //qrContent = barcode.url!!.url!!
+                //qrContent= barcode.url!!.title!!
+                qrContent = "QR URL data type: ${barcode.rawValue.toString()}"
+
                 qrCodeTouchCallback = { v: View, e: MotionEvent ->
                     if (e.action == MotionEvent.ACTION_DOWN && boundingRect.contains(e.getX().toInt(), e.getY().toInt())) {
                         val openBrowserIntent = Intent(Intent.ACTION_VIEW)
-                        openBrowserIntent.data = Uri.parse(qrContent)
+                        openBrowserIntent.data = Uri.parse(barcode.url!!.url!!)
                         v.context.startActivity(openBrowserIntent)
                         true
                     } else {
